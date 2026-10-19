@@ -1,0 +1,4 @@
+data/snapshot/
+data/france/
+__pycache__/
+.DS_Store

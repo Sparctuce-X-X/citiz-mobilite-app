@@ -1,0 +1,4 @@
+type,capex_eur,opex_annuel_eur,capex_bas,capex_haut,source
+citiz,35000,3000,28700,41500,"Station 1 voiture. Véhicule 24 000-36 000 € (Citiz, livre blanc déc. 2025), boîtier télématique 4 000 € HT et frais fixes 250 €/mois/véhicule (convention Pôle métropolitain du Genevois français - Citiz Alpes-Loire, 02/2023) ; signalétique 1 000 € = hypothèse. Détail : docs/COUTS.md"
+bus,20700,500,11400,43100,"Arrêt neuf, 2 quais accessibles (2 sens) : 6 300 € HT/arrêt (Métropole Aix-Marseille-Provence, Sd'AP, 16/05/2019), abri 7 670 € HT posé (La Balme-les-Grottes, 23/11/2024), poteaux 195 € (Beyne-Heusay, 02/2025) ; fonctionnement 500 €/an = hypothèse. Détail : docs/COUTS.md"
+velhop,45000,15000,24500,50000,"Station 10 VAE : 40 000-50 000 € (Mulhouse Alsace Agglomération, 08/07/2024) ; 22 stations + 90 vélos = 538 656 € HT (Niort Agglo, 11/12/2023) ; fonctionnement 1 500 €/vélo/an = hypothèse sous le coût complet 2 000-3 000 €/vélo/an (GART/CGDD, 2010). Détail : docs/COUTS.md"

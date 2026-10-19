@@ -1,0 +1,16 @@
+# Thème de l'application (app/app.py), lu quand on lance streamlit depuis la racine du dépôt.
+# Couleurs et polices alignées sur le diaporama (Rubik pour les titres, Public Sans pour le texte).
+[theme]
+base = "light"
+primaryColor = "#14213D"
+backgroundColor = "#F7F4EE"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#2B3445"
+font = "Public Sans:https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&display=swap"
+headingFont = "Rubik:https://fonts.googleapis.com/css2?family=Rubik:wght@500;700&display=swap"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
