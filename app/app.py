@@ -1056,7 +1056,6 @@ python -m national.acces --all
 python -m national.candidats --roads --all
 python -m national.modele
 python -m national.territoires --all"""
-FILTRES_CITIZ = {"tous": "Tous les EPCI", "sans": "Sans Citiz aujourd'hui", "avec": "Avec Citiz aujourd'hui"}
 
 
 def signature_france(directory: Path) -> tuple:
@@ -1076,8 +1075,11 @@ def carte_epci(directory: str, signature: tuple) -> dict:
     return fr.geojson_epci(d["epci_access"], d["epci_geo"])
 
 
+INDICATEURS_CARTE = ["part_sans_option", "potentiel_500k"]  # « part avec Citiz » : dans le texte, pas sur la carte
+
+
 def choix_indicateur() -> str:
-    return st.segmented_control("Indicateur de la carte", list(fr.INDICATEURS), default="part_sans_option",
+    return st.segmented_control("Indicateur de la carte", INDICATEURS_CARTE, default="part_sans_option",
                                 format_func=lambda k: fr.INDICATEURS[k][0], required=True,
                                 key="indicateur_france") or "part_sans_option"
 
@@ -1105,14 +1107,9 @@ def carte_france(directory: str, signature: tuple, cle: str) -> None:
 
 def classement_france(eacc: pd.DataFrame) -> None:
     st.subheader("Où investir en premier ?")
-    filtre = st.segmented_control("Citiz aujourd'hui", list(FILTRES_CITIZ), default="tous", required=True,
-                                  format_func=FILTRES_CITIZ.get, key="filtre_citiz") or "tous"
-    if filtre == "sans":
-        st.info("Citiz n'est pas encore présent dans ces intercommunalités : en ouvrant l'une d'elles, la rubrique ③ "
-                "montre où une première station desservirait le plus d'habitants, et le plan combine Citiz, bus et vélo.")
-    top = fr.classement(eacc, filtre, n=20)
+    top = fr.classement(eacc, "tous", n=10)
     if top.empty:
-        st.info("Aucune intercommunalité ne correspond à ce filtre.")
+        st.info("Aucune intercommunalité à classer.")
         return
     avec_detail = {k for k in TERRITOIRES if k != fr.FRANCE}
     st.dataframe(fr.classement_fr(top, avec_detail), hide_index=True, width="stretch",
@@ -1134,51 +1131,6 @@ def classement_france(eacc: pd.DataFrame) -> None:
              on_click=changer_territoire, args=(choix, RUBRIQUES[2]))
     note("Ouvre la rubrique ③ « Où investir ? » de l'intercommunalité : emplacements proposés, carte et coûts. "
          "Le lien de la page (<code>?territoire=&lt;code&gt;</code>) se partage tel quel.")
-
-
-@st.fragment
-def plan_national(plan: pd.DataFrame, eacc: pd.DataFrame) -> None:
-    st.subheader("Plan national sous budget")
-    budgets = fr.budgets_plan(plan)
-    budget = st.select_slider("Budget national", options=budgets, value=budgets[len(budgets) // 2],
-                              format_func=ind.fmt_eur, key="budget_france",
-                              help="Investissement et fonctionnement sur l'horizon du plan calculé, toutes "
-                                   "intercommunalités confondues.")
-    sel = fr.plan_sous_budget(plan, budget)
-    if sel.empty:
-        st.info("Aucun emplacement ne tient dans ce budget : choisissez un budget plus élevé.")
-        return
-    rep = fr.plan_par_epci(sel, eacc)
-    m1, m2 = st.columns(2)
-    m3, m4 = m1, m2
-    m1.metric("Emplacements", ind.fmt_int(len(sel)), border=True, help=ind.compte_types(sel["type"].value_counts().to_dict()))
-    m2.metric("Habitants nouvellement desservis", ind.fmt_int(sel["new_pop"].sum()), border=True,
-              help="Somme par équipement : un habitant qui gagne à la fois le bus et Citiz compte deux fois.")
-    m3.metric("Coût du plan", ind.fmt_eur_plein(sel["cost_eur"].sum()), border=True)
-    m4.metric("Intercommunalités concernées", ind.fmt_int(len(rep)), border=True)
-    gauche, droite = st.container(), st.container()
-    with gauche:
-        m, _ = base_map(rep, zoom=6)
-        maxi = float(rep["new_pop"].max()) or 1.0
-        for r in rep.itertuples():
-            folium.CircleMarker(
-                [r.lat, r.lon], radius=float(4 + 18 * (r.new_pop / maxi) ** 0.5), color="#ffffff", weight=1,
-                fill=True, fill_color=ind.CLASS_COLORS[4], fill_opacity=0.8,
-                tooltip=f"<b>{r.epci_nom}</b><br/>{ind.fmt_int(r.n_emplacements)} emplacements · "
-                        f"{ind.fmt_int(r.new_pop)} habitants nouvellement desservis · {ind.fmt_eur_plein(r.cout_eur)}",
-            ).add_to(m)
-        Legende("Plan national", [(f'<span style="display:inline-block;width:12px;height:12px;border-radius:50%;'
-                                   f'background:{ind.CLASS_COLORS[4]}"></span>',
-                                   "Taille = habitants nouvellement desservis")]).add_to(m)
-        Cadrage([[rep["lat"].min(), rep["lon"].min()], [rep["lat"].max(), rep["lon"].max()]], animer=False).add_to(m)
-        show_map(m, None, height=320, key="carte_plan_france")
-    with droite:
-        st.dataframe(fr.plan_par_epci_fr(rep), hide_index=True, width="stretch", height=320)
-    st.download_button("Télécharger la répartition (CSV)",
-                       rep.drop(columns=["lat", "lon"]).to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
-                       file_name=f"plan_france_{budget}eur.csv", mime="text/csv")
-    note("Plan classé une seule fois pour toute la France (glouton : chaque euro va là où il dessert le plus "
-         "d'habitants) ; un budget plus petit garde les premiers emplacements. Point = intercommunalité.")
 
 
 def vue_france() -> None:
@@ -1203,10 +1155,9 @@ def vue_france() -> None:
         c1, c2 = st.columns(2)
         c1.metric("Habitants (carreaux INSEE)", ind.fmt_int(k["population"]), border=True,
                   help=f"{ind.fmt_int(k['n_epci'])} intercommunalités (EPCI) de France métropolitaine.")
-        c2.metric("Aucune option à 5 min", ind.fmt_pct(k["part_sans_option"]), border=True)
-        c1.metric("Une station Citiz à 5 min", ind.fmt_pct(k["part_citiz"]), border=True)
-        c2.metric("EPCI où Citiz est présent", f"{ind.fmt_int(k['n_epci_citiz'])} sur {ind.fmt_int(k['n_epci'])}",
-                  border=True)
+        c2.metric("Une station Citiz à 5 min", ind.fmt_pct(k["part_citiz"]), border=True,
+                  help=f"Citiz est présent dans {ind.fmt_int(k['n_epci_citiz'])} intercommunalités sur "
+                       f"{ind.fmt_int(k['n_epci'])}.")
         note(f"Si chaque intercommunalité investissait 500 000 € (investissement et 5 ans de fonctionnement) : "
              f"<b>{ind.fmt_int(k['potentiel_500k'])}</b> habitants nouvellement desservis au total, même méthode et même "
              "optimiseur que Strasbourg dans chaque EPCI.")
@@ -1216,13 +1167,7 @@ def vue_france() -> None:
                     "dès qu'ils seront là.")
         else:
             cle = choix_indicateur()
-            sens = ("Froid : beaucoup d'habitants sans option à 5 min ; chaud : peu." if cle == "part_sans_option" else
-                    "Froid : aucune ou peu ; chaud : beaucoup.")
-            note(f"Une couleur par cinquième des intercommunalités (quand beaucoup sont à zéro, elles forment la "
-                 f"première classe). {sens} Info-bulle : chiffres agrégés de l'EPCI, jamais un carreau.")
         classement_france(eacc)
-        if d["plan_france"] is not None and not d["plan_france"].empty:
-            plan_national(d["plan_france"], eacc)
         pied_panneau()
     if cle:
         carte_france(str(directory), sig, cle)
