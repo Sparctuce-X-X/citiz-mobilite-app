@@ -97,6 +97,9 @@ st.markdown(
       [data-testid="stMetricLabel"] div {{overflow:visible;}}
       @media (min-width: 900px) {{
         header[data-testid="stHeader"] {{background:transparent; pointer-events:none;}}
+        /* Streamlit Cloud : la barre d'outils couvre toute la largeur en haut ; seuls ses boutons restent cliquables */
+        header[data-testid="stHeader"] [data-testid="stToolbar"], header[data-testid="stHeader"] [data-testid="stToolbar"] > div {{pointer-events:none;}}
+        header[data-testid="stHeader"] button, header[data-testid="stHeader"] a {{pointer-events:auto;}}
         .block-container {{padding:0 !important; max-width:100% !important;}}
         .st-key-fond {{position:fixed; inset:0; z-index:0;}}
         .st-key-fond iframe {{position:fixed; inset:0; width:100vw !important; height:100vh !important;}}
