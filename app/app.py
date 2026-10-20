@@ -10,6 +10,7 @@ Territoires : Strasbourg (défaut), villes exportées, snapshots d'EPCI (data/sn
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import json
 import sys
@@ -67,19 +68,52 @@ data_dir = None if EST_FRANCE else TERRITOIRES[TERRITOIRE]["dossier"]
 VILLE = ({"ville": fr.FRANCE, "nom": fr.FRANCE_LABEL, "titre": fr.FRANCE_LABEL, "velo_nom": ind.VELO_GENERIQUE,
           "a_velo": True, "est_epci": False} if EST_FRANCE else ind.load_city(data_dir))
 ind.nommer_velo(VILLE["velo_nom"])
-st.set_page_config(page_title=f"Mobilité à 5 minutes · {VILLE['titre']}", page_icon="🚏", layout="wide")
+STATIC = APP_DIR / "static"
+NOM = "À deux pas"
+st.set_page_config(page_title=f"{NOM} · {VILLE['titre']}", page_icon=str(STATIC / "favicon.png"), layout="wide")
+LOGO = base64.b64encode((STATIC / "logo_128.png").read_bytes()).decode()
 
+# Mise en page « carte plein écran » : la carte (conteneur `fond`) occupe toute la fenêtre ; l'en-tête (`entete`),
+# les rubriques (`nav`) et le panneau de réglages et de résultats (`panneau`) flottent par-dessus. Sous 900 px de
+# large, tout reprend le flux normal (téléphone).
+PANNEAU = "clamp(320px, 28vw, 420px)"
 st.markdown(
-    """
+    f"""
     <style>
-      .block-container {padding-top: 1.6rem; padding-bottom: 1rem;}
-      div[data-testid="stMetricValue"] {font-size: 1.75rem;}
-      .note {font-size:.85rem; color:#4A5568;}
+      .note {{font-size:.85rem; color:#4A5568;}}
       [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] *, .stCaption, .stCaption *,
-      [data-testid="stWidgetLabel"] p {color:#4A5568 !important; opacity:1 !important;}
-      .reco {font-size:1.08rem; background:#FFFFFF; border-left:4px solid #14213D; border-radius:4px;
-             padding:.7rem 1rem; margin:.2rem 0 .9rem;}
-      .footer {font-size:.78rem; color:#4A5568; margin-top:1.5rem; border-top:1px solid rgba(43,52,69,.2); padding-top:.6rem;}
+      [data-testid="stWidgetLabel"] p {{color:#4A5568 !important; opacity:1 !important;}}
+      .reco {{font-size:.98rem; background:#F7F4EE; border-left:4px solid #14213D; border-radius:4px;
+             padding:.6rem .8rem; margin:.1rem 0 .4rem;}}
+      .footer {{font-size:.72rem; color:#4A5568; margin-top:.6rem; border-top:1px solid rgba(43,52,69,.2); padding-top:.5rem;}}
+      .marque {{display:flex; align-items:center; gap:10px;}}
+      .marque img {{width:44px; height:44px;}}
+      .marque b {{font-family:Rubik, sans-serif; font-size:1.45rem; color:#14213D; line-height:1;}}
+      .marque span {{display:block; font-size:.74rem; color:#4A5568; margin-top:3px;}}
+      .hero {{font-family:Rubik, sans-serif; font-weight:700; font-size:3.4rem; line-height:1; color:#2E7D4F;}}
+      .hero-lib {{font-size:.92rem; color:#2B3445; margin:.3rem 0 .2rem;}}
+      div[data-testid="stMetricValue"] {{font-size:1.3rem;}}
+      [data-testid="stMetricLabel"] p {{font-size:.78rem; white-space:normal; line-height:1.25;}}
+      [data-testid="stMetricLabel"] div {{overflow:visible;}}
+      @media (min-width: 900px) {{
+        header[data-testid="stHeader"] {{background:transparent; pointer-events:none;}}
+        .block-container {{padding:0 !important; max-width:100% !important;}}
+        .st-key-fond {{position:fixed; inset:0; z-index:0;}}
+        .st-key-fond iframe {{position:fixed; inset:0; width:100vw !important; height:100vh !important;}}
+        .st-key-entete, .st-key-nav, .st-key-panneau {{position:fixed; z-index:20; background:rgba(255,255,255,.93);
+          backdrop-filter:blur(12px); box-shadow:0 8px 28px rgba(20,33,61,.18); box-sizing:border-box;}}
+        .st-key-entete {{top:16px; left:16px; width:320px; padding:14px 16px; border-radius:16px; gap:.5rem;}}
+        .st-key-entete [data-testid="stHeading"] {{position:absolute; width:1px; height:1px; overflow:hidden;
+          clip:rect(0 0 0 0); white-space:nowrap;}}
+        .st-key-panneau h2, .st-key-panneau h3 {{font-size:1.05rem !important; padding:.4rem 0 .1rem !important;}}
+        .st-key-panneau h4 {{font-size:.98rem !important;}}
+        .st-key-nav {{top:16px; left:352px; padding:4px 8px; border-radius:999px; width:auto;}}
+        .st-key-panneau {{top:60px; right:16px; bottom:16px; width:{PANNEAU}; padding:16px 18px; border-radius:16px;
+          overflow-y:auto; overflow-x:hidden;}}
+      }}
+      @media (max-width: 899px) {{
+        .st-key-fond iframe {{height:60vh !important;}}
+      }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -206,6 +240,77 @@ def show_map(m: folium.Map, centre: list[float] | None = None, zoom: int | None 
               center=centre, zoom=zoom if centre else None)
 
 
+class Fond(MacroElement):
+    """Carte de fond plein écran : hauteur de la fenêtre, zoom et couches en bas à droite à gauche du panneau,
+    cadrage sur l'emprise (ou sur un point) en laissant de la place à l'en-tête et au panneau flottants."""
+
+    _template = Template(
+        """
+        {% macro header(this, kwargs) %}
+        <style>
+          .folium-map, .leaflet-container {height: 100vh !important;}
+          @media (min-width: 900px) {
+            .leaflet-right {right: calc({{ this.panneau }} + 24px);}
+            .leaflet-bottom.leaflet-left {left: 8px;}
+          }
+        </style>
+        {% endmacro %}
+        {% macro script(this, kwargs) %}
+        (function () {
+            var carte = {{ this._parent.get_name() }};
+            carte.zoomControl.setPosition("bottomright");
+            var cadrer = function () {
+                carte.invalidateSize();
+                var large = window.innerWidth >= 900;
+                var droite = large ? Math.min(Math.max(320, 0.28 * window.innerWidth), 420) + 40 : 20;
+                var opts = {paddingTopLeft: [large ? 350 : 20, large ? 80 : 20], paddingBottomRight: [droite, 30],
+                            maxZoom: 15{{ this.option }}};
+                {% if this.point %}
+                carte.setView({{ this.point }}, {{ this.zoom }}, {animate: false});
+                {% else %}
+                carte.fitBounds({{ this.bounds }}, opts);
+                {% endif %}
+            };
+            cadrer();
+            [300, 1000].forEach(function (ms) { setTimeout(cadrer, ms); });
+        })();
+        {% endmacro %}
+        """
+    )
+
+    def __init__(self, bounds: list[list[float]], point: list[float] | None = None, zoom: int = 15,
+                 animer: bool = True):
+        super().__init__()
+        self._name = "Fond"
+        self.bounds = json.dumps(bounds)
+        self.point = json.dumps(point) if point else None
+        self.zoom = zoom
+        self.option = "" if animer else ", animate: false"
+        self.panneau = PANNEAU
+
+
+def emprise(df: pd.DataFrame) -> list[list[float]]:
+    return [[float(df["lat"].min()), float(df["lon"].min())], [float(df["lat"].max()), float(df["lon"].max())]]
+
+
+def carte_fond(m: folium.Map, bounds: list[list[float]], point: list[float] | None = None, zoom: int = 15,
+               animer: bool = True, key: str = "carte_fond") -> None:
+    """Affiche `m` en fond plein écran (conteneur `fond`), avec l'adresse recherchée et le choix du fond de carte."""
+    adr = st.session_state.get("adresse")
+    if adr and not adr.get("erreur"):
+        folium.Marker([adr["lat"], adr["lon"]], tooltip=adr["label"], z_index_offset=100_000,
+                      icon=folium.Icon(color="red", icon="home", prefix="fa")).add_to(m)
+    folium.LayerControl(collapsed=True, position="bottomright").add_to(m)
+    Fond(bounds, point, zoom, animer).add_to(m)
+    with st.container(key="fond"):
+        st_folium(m, height=760, use_container_width=True, returned_objects=[], key=key)
+
+
+def chiffre_hero(valeur: str, libelle: str) -> None:
+    """Le chiffre clé de la rubrique, en très grand en tête du panneau."""
+    st.markdown(f'<div class="hero">{valeur}</div><div class="hero-lib">{libelle}</div>', unsafe_allow_html=True)
+
+
 @st.cache_data(show_spinner="Recherche de l'adresse…", ttl=3600)
 def chercher_adresse(q: str, lat: float, lon: float) -> dict | None:
     """Géocodage par la Base Adresse Nationale (api-adresse.data.gouv.fr), au plus près du territoire affiché."""
@@ -223,7 +328,8 @@ def chercher_adresse(q: str, lat: float, lon: float) -> dict | None:
 
 
 def barre_adresse() -> None:
-    q = st.text_input("Rechercher une adresse", key="adresse_q", placeholder="ex. 1 place Kléber, Strasbourg",
+    q = st.text_input("Rechercher une adresse", key="adresse_q", placeholder="🔍 Rechercher une adresse",
+                      label_visibility="collapsed",
                       help="L'adresse est localisée par la Base Adresse Nationale (api-adresse.data.gouv.fr), "
                            "puis affichée sur les cartes. Rien n'est conservé.")
     q = (q or "").strip()
@@ -371,6 +477,40 @@ def note(html: str) -> None:
     st.markdown(f'<p class="note">{html}</p>', unsafe_allow_html=True)
 
 
+def pied_panneau() -> None:
+    """Bas du panneau : méthode, limites et sources."""
+    with st.expander("Méthode et limites"):
+        st.markdown(
+            f"""
+- **5 minutes = 400 m sur le réseau piéton réel** (OpenStreetMap, 4,8 km/h), pas à vol d'oiseau.
+- **Accessibilité** : options à 5 min par carreau INSEE de 200 m ; les arrêts sont pondérés par leur fréquence
+  (`min(passages / 200, 3)`), chaque station Citiz ou {VILLE['velo_nom']} compte 1.
+- **Habitants nouvellement desservis** : seuls les habitants qui n'ont pas encore d'option du même type à 5 min
+  comptent (bus : ni bus ni tram). On ne renforce pas les zones déjà couvertes. Chiffre affiché : personnes
+  distinctes (un habitant qui gagne le bus et Citiz compte une fois), dénominateur de toutes les parts.
+- **Modèle prédictif** (Citiz) : AUC 0,87 sur un réseau Citiz jamais vu à l'entraînement. Son score mesure la
+  ressemblance aux stations Citiz actuelles, pas l'usage réel ni une probabilité de réservation : d'où le curseur équité.
+- **CO₂** : 2,6 t CO₂e/an par voiture Citiz ajoutée (borne basse ADEME 2022), arrondi ; rien pour bus et vélo.
+- **Vie privée** : carreaux de moins de 11 ménages grisés, sans valeur ; indicateurs sociaux seulement agrégés.
+
+Pour aller plus loin : [limites]({REPO}/docs/LIMITES.md) · [éthique]({REPO}/docs/ETHIQUE.md) ·
+[impact carbone]({REPO}/docs/IMPACT.md) · [contrat de données]({REPO}/docs/DATA_CONTRACT.md) ·
+[France entière]({REPO}/docs/FRANCE.md)
+"""
+        )
+    gtfs = "GTFS des réseaux (transport.data.gouv.fr)" if EST_FRANCE else "GTFS du réseau urbain"
+    calculs = ("Python local, même code que les notebooks Fabric (docs/FRANCE.md)" if EST_FRANCE
+               else "Microsoft Fabric, région France Central")
+    st.markdown(
+        f'<div class="footer">Sources : INSEE Filosofi 2021 (carreaux 200 m) · {gtfs} (arrêts et fréquences) · '
+        f"flux GBFS Citiz et {VILLE['velo_nom']} · OpenStreetMap (réseau piéton) · QPV 2024-2030 (ANCT) · ADEME (CO₂). "
+        f"Calculs : {calculs}. Fonds de carte : Esri, HERE, Garmin, © contributeurs "
+        "OpenStreetMap (fond clair) · © contributeurs OpenStreetMap (plan des rues) · Esri, Maxar, Earthstar Geographics "
+        "(vue satellite).</div>",
+        unsafe_allow_html=True,
+    )
+
+
 # --------------------------------------------------------------------------- en-tête
 
 data = {} if EST_FRANCE else load_data(data_dir)
@@ -384,29 +524,29 @@ def changer_territoire(cle: str, rubrique: str | None = None) -> None:
         st.session_state["rubrique"] = rubrique
 
 
-titre, choix_territoire = st.columns([3, 2], vertical_alignment="center")
-if EST_FRANCE:
-    titre.title("France métropolitaine : où investir en premier pour la mobilité à 5 minutes ?")
-elif VILLE["est_epci"]:
-    titre.title(f"{VILLE['titre']} : où ouvrir les prochaines options de mobilité ?")
-else:
-    titre.title(f"Où ouvrir les prochaines options de mobilité à {VILLE['titre']} ?")
-if len(TERRITOIRES) > 1:
-    choix_territoire.selectbox(
-        "Territoire", list(TERRITOIRES), format_func=lambda k: TERRITOIRES[k]["label"], key="territoire",
-        placeholder="Nom ou code de l'intercommunalité…",
-        help="Tapez un nom (« Lyon ») ou un code SIREN d'EPCI (« 200046977 »). Même outil, même méthode partout : "
-             "5 minutes = 400 m sur le réseau piéton réel. Le lien de la page garde le territoire choisi.")
+with st.container(key="entete"):
+    st.markdown(f'<div class="marque"><img src="data:image/png;base64,{LOGO}" alt=""><div><b>{NOM}</b>'
+                "<span>Où ouvrir la prochaine option de mobilité</span></div></div>", unsafe_allow_html=True)
+    if EST_FRANCE:
+        st.title("France métropolitaine : où investir en premier pour la mobilité à 5 minutes ?")
+    elif VILLE["est_epci"]:
+        st.title(f"{VILLE['titre']} : où ouvrir les prochaines options de mobilité ?")
+    else:
+        st.title(f"Où ouvrir les prochaines options de mobilité à {VILLE['titre']} ?")
+    if len(TERRITOIRES) > 1:
+        st.selectbox(
+            "Territoire", list(TERRITOIRES), format_func=lambda k: TERRITOIRES[k]["label"], key="territoire",
+            placeholder="Nom ou code de l'intercommunalité…", label_visibility="collapsed",
+            help="Tapez un nom (« Lyon ») ou un code SIREN d'EPCI (« 200046977 »). Même outil, même méthode partout : "
+                 "5 minutes = 400 m sur le réseau piéton réel. Le lien de la page garde le territoire choisi.")
+    if territoire_inconnu:
+        st.warning(f"Territoire « {territoire_inconnu} » introuvable : {TERRITOIRES[TERRITOIRE]['label']} est affiché.")
+    if EST_FRANCE:
+        st.caption("Toutes les intercommunalités de France métropolitaine · 5 min à pied = 400 m sur le réseau piéton réel")
+    elif access is not None:
+        barre_adresse()
 if st.query_params.get("territoire") != TERRITOIRE:
     st.query_params["territoire"] = TERRITOIRE  # lien partageable
-if territoire_inconnu:
-    st.warning(f"Territoire « {territoire_inconnu} » introuvable : {TERRITOIRES[TERRITOIRE]['label']} est affiché.")
-if EST_FRANCE:
-    st.caption("Toutes les intercommunalités (EPCI) de France métropolitaine · autopartage Citiz, transports en commun "
-               "et vélos en libre-service · 5 minutes à pied = 400 m sur le réseau piéton réel")
-else:
-    st.caption(f"Autopartage Citiz, arrêts de bus et stations {VILLE['velo_nom']} · {VILLE['nom']} · "
-               "5 minutes à pied = 400 m sur le réseau piéton réel")
 
 if not EST_FRANCE and access is None:
     st.info(
@@ -428,27 +568,44 @@ SANS_VELO = not EST_FRANCE and (not VILLE["a_velo"] or float(access["n_velhop"].
 @st.fragment
 def rubrique_acces() -> None:
     k = ind.access_kpis(access)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Habitants (carreaux INSEE)", ind.fmt_int(k["population"]), border=True)
-    c2.metric("Au moins une option à 5 min", ind.fmt_pct(k["part_au_moins_une"]), border=True)
-    c3.metric("Aucune option à 5 min", ind.fmt_pct(k["part_aucune"]), border=True)
-    c4.metric("Une station Citiz à 5 min", ind.fmt_pct(k["part_citiz"]), border=True)
-    absents = [nom for nom, sans in (("Citiz", SANS_CITIZ), ("vélo en libre-service", SANS_VELO)) if sans]
-    if absents:
-        note(f"Pas encore de {' ni de '.join(absents)} sur ce territoire : les options comptées ici sont "
-             "les autres modes. La rubrique ③ montre où les premières stations desserviraient le plus d'habitants.")
+    with st.container(key="panneau"):
+        chiffre_hero(ind.fmt_pct(k["part_aucune"]),
+                     f"des habitants n'ont <b>aucune option</b> à 5 minutes à pied "
+                     f"({ind.fmt_int(k['population'] * k['part_aucune'])} personnes)")
+        c1, c2 = st.columns(2)
+        c1.metric("Habitants (carreaux INSEE)", ind.fmt_int(k["population"]), border=True)
+        c2.metric("Au moins une option à 5 min", ind.fmt_pct(k["part_au_moins_une"]), border=True)
+        c1.metric("Aucune option à 5 min", ind.fmt_pct(k["part_aucune"]), border=True)
+        c2.metric("Une station Citiz à 5 min", ind.fmt_pct(k["part_citiz"]), border=True)
+        absents = [nom for nom, sans in (("Citiz", SANS_CITIZ), ("vélo en libre-service", SANS_VELO)) if sans]
+        if absents:
+            note(f"Pas encore de {' ni de '.join(absents)} sur ce territoire : les options comptées ici sont "
+                 "les autres modes. La rubrique ③ montre où les premières stations desserviraient le plus d'habitants.")
+        modes = st.pills(
+            "Modes pris en compte", options=list(ind.MODES), default=list(ind.MODES), selection_mode="multi",
+            format_func=lambda m: ind.MODE_LABELS[m], key="modes",
+        ) or []
+        adresse = encart_adresse()
+        if not modes:
+            st.info("Cochez au moins un mode de transport pour afficher la carte d'accessibilité.")
+        elif set(modes) != set(ind.MODES):
+            part = (access["pop"] * ind.has_option(access, modes)).sum() / access["pop"].sum()
+            note(f"Avec les modes choisis : <b>{ind.fmt_pct(part)}</b> des habitants ont au moins une option à 5 min. "
+                 "Classes 2 à 5 recalculées (quartiles du nombre d'options des modes choisis).")
+        note("Les couleurs décrivent une <b>quantité d'options de transport</b> à 5 minutes à pied "
+             "(arrêts pondérés par leur fréquence), pas un jugement sur un quartier. Les carreaux gris comptent moins de "
+             "11 ménages : leurs valeurs ne sont pas affichées (secret statistique INSEE), mais restent dans les totaux.")
+        demo = demographie(departement(data["silver_carreaux"]), 5)
+        if demo:
+            note(f'<b>Demain</b> (projections INSEE Omphale 2022, {demo["departement"]}) : '
+                 f'{"+" if demo["evolution_2040"] >= 0 else ""}{ind.fmt_pct(demo["evolution_2040"])} d\'habitants d\'ici 2040, '
+                 f'et la part des 75 ans et plus passerait de {ind.fmt_pct(demo["part_75p_2018"])} à '
+                 f'{ind.fmt_pct(demo["part_75p_2070"])} en 2070. Pour une personne âgée, 5 minutes à pied couvrent moins '
+                 "que 400 m : l'accès réel sera plus faible que sur cette carte.")
+        pied_panneau()
 
-    modes = st.pills(
-        "Modes pris en compte", options=list(ind.MODES), default=list(ind.MODES), selection_mode="multi",
-        format_func=lambda m: ind.MODE_LABELS[m], key="modes",
-    ) or []
-    if not modes:
-        st.info("Cochez au moins un mode de transport pour afficher la carte d'accessibilité.")
-    else:
-        m, centre = base_map(access)
-        zoom = 12
-        if encart_adresse() is not None:
-            centre, zoom = [st.session_state["adresse"]["lat"], st.session_state["adresse"]["lon"]], 15
+    m, _ = base_map(access)
+    if modes:
         folium.GeoJson(
             carreaux_geojson(data_dir, tuple(sorted(modes))), name="Offre à 5 min",
             style_function=lambda f: {"fillColor": f["properties"]["color"], "fillOpacity": f["properties"]["opacity"],
@@ -458,21 +615,8 @@ def rubrique_acces() -> None:
         Legende("Options à 5 min à pied",
                 [(carre(ind.CLASS_COLORS[c]), ind.CLASS_LABELS[c]) for c in range(1, 6)]
                 + [(carre(ind.PROTECTED_COLOR), ind.PROTECTED_LABEL)]).add_to(m)
-        show_map(m, centre, zoom=zoom, key="carte_acces")
-        if set(modes) != set(ind.MODES):
-            part = (access["pop"] * ind.has_option(access, modes)).sum() / access["pop"].sum()
-            note(f"Avec les modes choisis : <b>{ind.fmt_pct(part)}</b> des habitants ont au moins une option à 5 min. "
-                 "Classes 2 à 5 recalculées (quartiles du nombre d'options des modes choisis).")
-    note("Les couleurs décrivent une <b>quantité d'options de transport</b> à 5 minutes à pied "
-         "(arrêts pondérés par leur fréquence), pas un jugement sur un quartier. Les carreaux gris comptent moins de "
-         "11 ménages : leurs valeurs ne sont pas affichées (secret statistique INSEE), mais restent dans les totaux.")
-    demo = demographie(departement(data["silver_carreaux"]), 5)
-    if demo:
-        note(f'<b>Demain</b> (projections INSEE Omphale 2022, {demo["departement"]}) : '
-             f'{"+" if demo["evolution_2040"] >= 0 else ""}{ind.fmt_pct(demo["evolution_2040"])} d\'habitants d\'ici 2040, '
-             f'et la part des 75 ans et plus passerait de {ind.fmt_pct(demo["part_75p_2018"])} à '
-             f'{ind.fmt_pct(demo["part_75p_2070"])} en 2070. Pour une personne âgée, 5 minutes à pied couvrent moins '
-             "que 400 m : l'accès réel sera plus faible que sur cette carte.")
+    point = [st.session_state["adresse"]["lat"], st.session_state["adresse"]["lon"]] if adresse is not None else None
+    carte_fond(m, emprise(access), point, key="carte_acces")
 
 
 # --------------------------------------------------------------------------- onglet 2 : population desservie
@@ -485,29 +629,21 @@ def rubrique_stations() -> None:
         st.info("La table `gold_station_population` n'est pas encore dans le snapshot.")
         return
     types_presents = [t for t in ("tram", "bus", "citiz", "velhop") if t in set(stations["target_type"])]
-    sel = st.pills("Équipements affichés", options=types_presents, default=types_presents, selection_mode="multi",
-                   format_func=lambda t: ind.TYPE_LABELS.get(t, t), key="types_st") or []
-    s = stations[stations["target_type"].isin(sel)].copy()
-    s["taille"] = (s["pop_desservie"].clip(lower=0) ** 0.5 / 3).clip(6, 28)  # pixels
-    s["tooltip"] = [f"<b>{n}</b><br/>{ind.TYPE_LABELS.get(t, t)}<br/>{ind.fmt_int(p)} habitants à 5 min à pied"
-                    for n, t, p in zip(s["name"], s["target_type"], s["pop_desservie"])]
-    left, right = st.columns([3, 2], gap="large")
-    with left:
+    with st.container(key="panneau"):
+        sel = st.pills("Équipements affichés", options=types_presents, default=types_presents, selection_mode="multi",
+                       format_func=lambda t: ind.TYPE_LABELS.get(t, t), key="types_st") or []
+        s = stations[stations["target_type"].isin(sel)].copy()
+        s["taille"] = (s["pop_desservie"].clip(lower=0) ** 0.5 / 3).clip(6, 28)  # pixels
+        s["tooltip"] = [f"<b>{n}</b><br/>{ind.TYPE_LABELS.get(t, t)}<br/>{ind.fmt_int(p)} habitants à 5 min à pied"
+                        for n, t, p in zip(s["name"], s["target_type"], s["pop_desservie"])]
+        top = ind.top_stations(s, n=10)
+        if len(top):
+            chiffre_hero(ind.fmt_int(top["pop_desservie"].iloc[0]),
+                         f"habitants à 5 min de <b>{top['name'].iloc[0]}</b>, l'équipement qui en dessert le plus")
+        encart_adresse()
         if s.empty:
             st.info("Choisissez au moins un type d'équipement.")
-        else:
-            m, centre = base_map(s)
-            # les plus petits par-dessus, pour qu'ils restent visibles
-            for i, r in enumerate(s.sort_values("pop_desservie", ascending=False).itertuples()):
-                sz = float(r.taille)
-                folium.Marker([r.lat, r.lon], tooltip=r.tooltip, z_index_offset=i,
-                              icon=folium.DivIcon(html=forme_svg(r.target_type, sz), icon_size=(sz, sz),
-                                                  icon_anchor=(sz / 2, sz / 2))).add_to(m)
-            legende_types(sel, titre="Taille = habitants à 5 min").add_to(m)
-            show_map(m, centre, key="carte_stations")
-    with right:
         st.subheader("Les 10 qui desservent le plus d'habitants")
-        top = ind.top_stations(s, n=10)
         st.dataframe(
             pd.DataFrame({"Nom": top["name"], "Type": top["target_type"].map(ind.TYPE_LABELS),
                           "Habitants à 5 min": top["pop_desservie"].round().astype(int)}),
@@ -517,16 +653,29 @@ def rubrique_stations() -> None:
         )
         note(f"{ind.fmt_int(len(s))} arrêts et stations affichés. Taille du pictogramme = habitants à 5 minutes à pied. "
              "Un habitant proche de plusieurs arrêts compte pour chacun : on ne peut pas additionner ces chiffres.")
+        pied_panneau()
+
+    m, _ = base_map(access)
+    # les plus petits par-dessus, pour qu'ils restent visibles
+    for i, r in enumerate(s.sort_values("pop_desservie", ascending=False).itertuples()):
+        sz = float(r.taille)
+        folium.Marker([r.lat, r.lon], tooltip=r.tooltip, z_index_offset=i,
+                      icon=folium.DivIcon(html=forme_svg(r.target_type, sz), icon_size=(sz, sz),
+                                          icon_anchor=(sz / 2, sz / 2))).add_to(m)
+    if sel:
+        legende_types(sel, titre="Taille = habitants à 5 min").add_to(m)
+    carte_fond(m, emprise(s if not s.empty else access), key="carte_stations")
 
 
 # --------------------------------------------------------------------------- onglet 3 : plan d'investissement
 
 
 def plan_map(plan: pd.DataFrame, zones: list[dict], height: int = 520, key: str = "plan",
-             differents: set | None = None) -> None:
+             differents: set | None = None, fond: bool = False) -> None:
     """Carte du plan : emplacements numérotés par priorité (n° 1 au-dessus), forme et couleur par type, et en
     pointillés la zone réellement atteignable à 5 minutes à pied (réseau piéton, pas un cercle). Cadrage
-    automatique sur le plan. `differents` : emplacements absents de l'autre plan (contour doré)."""
+    automatique sur le plan. `differents` : emplacements absents de l'autre plan (contour doré). `fond` : carte
+    plein écran derrière les panneaux, sinon carte dans le panneau."""
     differents = differents or set()
     m, _ = base_map(plan)
     lats, lons = list(plan["lat"]), list(plan["lon"])
@@ -554,7 +703,11 @@ def plan_map(plan: pd.DataFrame, zones: list[dict], height: int = 520, key: str 
         extra.append((f'<span style="display:inline-block;width:12px;height:12px;border-radius:50%;'
                       f'border:3px solid {CONTOUR_DIFF}"></span>', "Absent de l'autre plan"))
     legende_types([t for t in TYPES_PLAN if t in set(plan["type"])], extra, titre="Numéro = priorité").add_to(m)
-    Cadrage([[min(lats), min(lons)], [max(lats), max(lons)]]).add_to(m)
+    bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]
+    if fond:
+        carte_fond(m, bounds, key=key)
+        return
+    Cadrage(bounds).add_to(m)
     show_map(m, None, height=height, key=key)
 
 
@@ -607,21 +760,35 @@ def kpis_sociaux(kp: dict) -> None:
                        "par Citiz compte dans les deux lignes.")
 
 
+def fond_vide() -> None:
+    """Pas de plan à montrer : la carte de fond garde le territoire."""
+    m, _ = base_map(access)
+    carte_fond(m, emprise(access), key="plan")
+
+
 def rendu_plan(mod, inputs, budget: int, equity: float, types: tuple, horizon: int, min_p: float,
-               couts: tuple | None = None) -> None:
+               couts: tuple | None = None, haut=None, bas=None) -> None:
+    """`haut` : conteneur en tête du panneau (au-dessus des réglages) pour le chiffre clé et les indicateurs ;
+    `bas` : conteneur du panneau sous les réglages (indicateurs sociaux, tableau). La carte du plan va en fond."""
+    haut = haut or st.container()
     args = (data_dir, budget, equity, types, horizon, min_p, couts)
     try:
         plan = run_plan(*args)
         kp = plan_kpis(*args)
     except Exception as e:
-        st.warning(f"L'optimiseur n'a pas pu calculer ce plan ({type(e).__name__}). Essayez d'autres paramètres.")
+        haut.warning(f"L'optimiseur n'a pas pu calculer ce plan ({type(e).__name__}). Essayez d'autres paramètres.")
+        fond_vide()
         return
     if plan.empty:
-        st.info(ind.message_plan_vide(ind.couts_unitaires(table_couts(couts), horizon, types), budget, horizon, BUDGETS))
+        haut.info(ind.message_plan_vide(ind.couts_unitaires(table_couts(couts), horizon, types), budget, horizon, BUDGETS))
+        fond_vide()
         return
 
-    st.markdown(f'<div class="reco">{ind.recommandation(kp, budget, horizon)}</div>', unsafe_allow_html=True)
-    m1, m2, m3, m4 = st.columns(4)
+    with haut:
+        chiffre_hero(ind.fmt_int(kp["habitants_uniques"]), "habitants <b>nouvellement desservis</b> à 5 minutes à pied")
+        st.markdown(f'<div class="reco">{ind.recommandation(kp, budget, horizon)}</div>', unsafe_allow_html=True)
+        m1, m2 = st.columns(2)
+        m3, m4 = m1, m2
     m1.metric("Habitants nouvellement desservis", ind.fmt_int(kp["habitants_uniques"]), border=True,
               delta=ecart_budget({"budget": budget, "equite": equity, "types": types, "horizon": horizon, "min_p": min_p,
                                   "couts": couts},
@@ -636,32 +803,33 @@ def rendu_plan(mod, inputs, budget: int, equity: float, types: tuple, horizon: i
               help=f"{kp['voitures_citiz']} voiture(s) Citiz ajoutée(s), hypothèse prudente d'une voiture par station ; "
                    "2,6 t CO₂e par an et par voiture (borne basse ADEME 2022, docs/IMPACT.md). "
                    "Aucune estimation pour les arrêts de bus et stations vélo.")
-    demo = demographie(departement(data["silver_carreaux"]), horizon)
-    if demo:
-        note(f'À l\'horizon du plan ({demo["annee_horizon"]}), avec l\'évolution projetée de la population '
-             f'({demo["departement"]} : {"+" if demo["evolution_horizon"] >= 0 else ""}{ind.fmt_pct(demo["evolution_horizon"])}, INSEE Omphale) : '
-             f'<b>≈ {ind.fmt_int(round(kp["habitants_uniques"] * (1 + demo["evolution_horizon"]), -2))}</b> '
-             "habitants nouvellement desservis. Projection départementale : elle ne change pas l'ordre des emplacements.")
-    plan_map(plan, plan_zones(*args))
-    adresse_et_plan(plan)
-    note("Pointillés : zone réellement atteignable en 5 minutes à pied depuis chaque emplacement (réseau piéton "
-         "OpenStreetMap), pas un cercle. Fond : clair, plan des rues ou vue satellite (bouton en haut à droite).")
+    with haut:
+        demo = demographie(departement(data["silver_carreaux"]), horizon)
+        if demo:
+            note(f'À l\'horizon du plan ({demo["annee_horizon"]}), avec l\'évolution projetée de la population '
+                 f'({demo["departement"]} : {"+" if demo["evolution_horizon"] >= 0 else ""}{ind.fmt_pct(demo["evolution_horizon"])}, INSEE Omphale) : '
+                 f'<b>≈ {ind.fmt_int(round(kp["habitants_uniques"] * (1 + demo["evolution_horizon"]), -2))}</b> '
+                 "habitants nouvellement desservis. Projection départementale : elle ne change pas l'ordre des emplacements.")
+        adresse_et_plan(plan)
+    plan_map(plan, plan_zones(*args), key="plan", fond=True)
 
-    kpis_sociaux(kp)
-
-    st.subheader("Priorités d'investissement")
-    table = ind.plan_table(plan, data["gold_predictions"])
-    st.dataframe(ind.plan_table_fr(table), hide_index=True, width="stretch", height=min(38 * (len(table) + 1), 420),
-                 column_config={ind.P_USAGE_LABEL: st.column_config.TextColumn(help=ind.P_USAGE_HELP)})
-    note("Chaque emplacement est une proposition à vérifier sur le terrain (foncier, voirie, accord des riverains).")
-    st.download_button("Télécharger le plan (CSV)", table.to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
-                       file_name=f"plan_{budget}eur_equite{equity:.1f}.csv", mime="text/csv")
-    try:
-        stats = mod.summarize(plan, inputs)
-        with st.expander("Détail de l'optimiseur"):
-            st.json(stats, expanded=False)
-    except Exception:
-        pass
+    with bas or st.container():
+        note("Pointillés : zone réellement atteignable en 5 minutes à pied depuis chaque emplacement (réseau piéton "
+             "OpenStreetMap), pas un cercle. Fond : clair, plan des rues ou vue satellite (bouton en bas à droite).")
+        kpis_sociaux(kp)
+        st.subheader("Priorités d'investissement")
+        table = ind.plan_table(plan, data["gold_predictions"])
+        st.dataframe(ind.plan_table_fr(table), hide_index=True, width="stretch", height=min(38 * (len(table) + 1), 420),
+                     column_config={ind.P_USAGE_LABEL: st.column_config.TextColumn(help=ind.P_USAGE_HELP)})
+        note("Chaque emplacement est une proposition à vérifier sur le terrain (foncier, voirie, accord des riverains).")
+        st.download_button("Télécharger le plan (CSV)", table.to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
+                           file_name=f"plan_{budget}eur_equite{equity:.1f}.csv", mime="text/csv")
+        try:
+            stats = mod.summarize(plan, inputs)
+            with st.expander("Détail de l'optimiseur"):
+                st.json(stats, expanded=False)
+        except Exception:
+            pass
 
 
 def adresse_et_plan(plan: pd.DataFrame) -> None:
@@ -689,7 +857,10 @@ def liste_emplacements(plan: pd.DataFrame, ids: set) -> str:
 
 
 def rendu_comparaison(budget: int, equity: float, types: tuple, horizon: int, min_p: float,
-                      couts: tuple | None = None) -> None:
+                      couts: tuple | None = None, haut=None, bas=None) -> None:
+    """Deux plans au même budget. Panneau : conclusion et indicateurs des deux plans ; carte de fond : le plan choisi
+    (contour doré = emplacement absent de l'autre plan)."""
+    haut, bas = haut or st.container(), bas or st.container()
     eq = equity if equity > 0 else 1.0
     a_eff, a_eq = (data_dir, budget, 0.0, types, horizon, min_p, couts), (data_dir, budget, eq, types, horizon, min_p, couts)
     try:
@@ -698,40 +869,46 @@ def rendu_comparaison(budget: int, equity: float, types: tuple, horizon: int, mi
         z_eff, z_eq = plan_zones(*a_eff), plan_zones(*a_eq)
         conclusion = ind.conclusion_equite(ke, kq)
     except Exception as e:
-        st.warning(f"La comparaison n'a pas pu être calculée ({type(e).__name__}). "
-                   "Essayez un autre budget ou d'autres équipements.")
+        haut.warning(f"La comparaison n'a pas pu être calculée ({type(e).__name__}). "
+                     "Essayez un autre budget ou d'autres équipements.")
+        fond_vide()
         return
     if plan_eff.empty and plan_eq.empty:
-        st.info(ind.message_plan_vide(ind.couts_unitaires(table_couts(couts), horizon, types), budget, horizon, BUDGETS))
+        haut.info(ind.message_plan_vide(ind.couts_unitaires(table_couts(couts), horizon, types), budget, horizon, BUDGETS))
+        fond_vide()
         return
 
-    st.markdown(f"#### Même budget ({ind.fmt_eur_plein(budget)}), deux priorités")
-    st.info(conclusion)
     seul_eff, seul_eq = ind.plan_diff(plan_eff, plan_eq)
     t_eff, t_eq = "Chaque habitant compte pareil (curseur 0,0)", f"Équité (curseur {ind.fmt_dec(eq)})"
-    ca, cb = st.columns(2, gap="medium")
-    for col, titre, kp, pl, zones, diff, cle in ((ca, t_eff, ke, plan_eff, z_eff, seul_eff, "plan_eff"),
-                                                 (cb, t_eq, kq, plan_eq, z_eq, seul_eq, "plan_eq")):
-        with col:
-            st.markdown(f"**{titre}**")
-            x1, x2, x3 = st.columns(3)
-            x1.metric("Nouvellement desservis", ind.fmt_int(kp["habitants_uniques"]), border=True,
-                      help="Habitants nouvellement desservis (personnes distinctes).")
-            x2.metric("Classes 1 et 2", ind.fmt_pct(kp["part_classes_1_2"]), border=True)
-            x3.metric("En QPV", ind.fmt_pct(kp["part_qpv"]), border=True)
-            if not pl.empty:
-                plan_map(pl, zones, height=380, key=cle, differents=diff)
-            st.caption(ind.compte_types(kp["n_par_type"]) + (f" · CO₂ ≈ {kp['co2_t_an']}\u00a0t/an" if kp["voitures_citiz"] else ""))
-    st.markdown("##### Emplacements qui diffèrent entre les deux plans")
-    da, db = st.columns(2, gap="medium")
-    with da:
+    with haut:
+        st.markdown(f"#### Même budget ({ind.fmt_eur_plein(budget)}), deux priorités")
+        st.info(conclusion)
+        ca, cb = st.columns(2)
+        for col, titre, kp in ((ca, t_eff, ke), (cb, t_eq, kq)):
+            with col:
+                st.markdown(f"**{titre}**")
+                st.metric("Nouvellement desservis", ind.fmt_int(kp["habitants_uniques"]), border=True,
+                          help="Habitants nouvellement desservis (personnes distinctes).")
+                st.metric("Classes 1 et 2", ind.fmt_pct(kp["part_classes_1_2"]), border=True)
+                st.metric("En QPV", ind.fmt_pct(kp["part_qpv"]), border=True)
+                st.caption(ind.compte_types(kp["n_par_type"])
+                           + (f" · CO₂ ≈ {kp['co2_t_an']} t/an" if kp["voitures_citiz"] else ""))
+        vue = st.segmented_control("Plan affiché sur la carte", ["efficacite", "equite"], default="equite",
+                                   required=True, key="plan_affiche",
+                                   format_func={"efficacite": "Chaque habitant pareil", "equite": "Équité"}.get)
+    pl, zones, diff = (plan_eff, z_eff, seul_eff) if vue == "efficacite" else (plan_eq, z_eq, seul_eq)
+    if pl.empty:
+        fond_vide()
+    else:
+        plan_map(pl, zones, key="plan", differents=diff, fond=True)
+    with bas:
+        st.markdown("##### Emplacements qui diffèrent entre les deux plans")
         st.markdown("**Seulement dans le plan « chaque habitant compte pareil »**")
         st.markdown(liste_emplacements(plan_eff, seul_eff))
-    with db:
         st.markdown("**Seulement dans le plan équité**")
         st.markdown(liste_emplacements(plan_eq, seul_eq))
-    note("Contour doré sur les cartes : emplacement absent de l'autre plan. Le curseur équité est figé pendant la "
-         f"comparaison (plan équité calculé au curseur {ind.fmt_dec(eq)}).")
+        note("Contour doré sur la carte : emplacement absent de l'autre plan. Le curseur équité est figé pendant la "
+             f"comparaison (plan équité calculé au curseur {ind.fmt_dec(eq)}).")
 
 
 def reglages_couts(types) -> tuple | None:
@@ -797,9 +974,9 @@ def premieres_stations_citiz(horizon: int) -> None:
         return
     cout = ind.couts_unitaires(data["gold_costs"], horizon, ("citiz",)).get("citiz", 0.0)
     with st.expander("Premières stations Citiz possibles", expanded=True):
-        a, b = st.columns([3, 2], gap="medium")
+        a, b = st.container(), st.container()
         with a:
-            plan_map(top.assign(cost_eur=cout), ind.walk_zones(top, data["gold_candidates"], access), height=360,
+            plan_map(top.assign(cost_eur=cout), ind.walk_zones(top, data["gold_candidates"], access), height=300,
                      key="premieres_citiz")
         with b:
             p_usage = top["p_usage"] if "p_usage" in top else pd.Series(float("nan"), index=top.index)
@@ -824,8 +1001,9 @@ def rubrique_plan() -> None:
         with st.expander("Détail technique"):
             st.code(inputs_or_err if mod is None else "gold_candidates absent du snapshot")
         return
-    ctrl, main = st.columns([1, 3], gap="large")
-    with ctrl:
+    panneau = st.container(key="panneau")
+    with panneau:
+        haut = st.container()
         st.subheader("Vos paramètres")
         budget = st.select_slider("Budget", options=BUDGETS, value=500_000, format_func=ind.fmt_eur, key="budget")
         horizon = st.slider("Horizon (années de fonctionnement comptées)", 1, 10, 5, key="horizon")
@@ -849,18 +1027,21 @@ def rubrique_plan() -> None:
                   help="Calcule côte à côte le plan au curseur 0,0 et le plan au curseur choisi (1,0 si le curseur "
                        "est à 0,0). Le curseur est figé pendant la comparaison.")
 
-    with main:
+        bas = st.container()
+        pied_panneau()
+    with haut:
         if SANS_CITIZ:
             premieres_stations_citiz(horizon)
         if SANS_VELO and "velhop" in types:
             note("Pas de vélo en libre-service sur ce territoire aujourd'hui : une station vélo proposée supposerait de "
                  "lancer le service (coût de lancement non compté dans le coût unitaire).")
-        if not types:
-            st.info("Choisissez au moins un type d'équipement.")
-        elif compare:
-            rendu_comparaison(budget, equity, tuple(types), horizon, min_p, couts)
-        else:
-            rendu_plan(mod, inputs_or_err, budget, equity, tuple(types), horizon, min_p, couts)
+    if not types:
+        haut.info("Choisissez au moins un type d'équipement.")
+        fond_vide()
+    elif compare:
+        rendu_comparaison(budget, equity, tuple(types), horizon, min_p, couts, haut=haut, bas=bas)
+    else:
+        rendu_plan(mod, inputs_or_err, budget, equity, tuple(types), horizon, min_p, couts, haut=haut, bas=bas)
 
 
 # --------------------------------------------------------------------------- vue France métropolitaine
@@ -892,11 +1073,14 @@ def carte_epci(directory: str, signature: tuple) -> dict:
     return fr.geojson_epci(d["epci_access"], d["epci_geo"])
 
 
-@st.fragment
-def carte_france(directory: str, signature: tuple) -> None:
-    cle = st.segmented_control("Indicateur de la carte", list(fr.INDICATEURS), default="part_sans_option",
-                               format_func=lambda k: fr.INDICATEURS[k][0], required=True,
-                               key="indicateur_france") or "part_sans_option"
+def choix_indicateur() -> str:
+    return st.segmented_control("Indicateur de la carte", list(fr.INDICATEURS), default="part_sans_option",
+                                format_func=lambda k: fr.INDICATEURS[k][0], required=True,
+                                key="indicateur_france") or "part_sans_option"
+
+
+def carte_france(directory: str, signature: tuple, cle: str) -> None:
+    """Carte de fond : intercommunalités colorées selon l'indicateur choisi dans le panneau."""
     try:
         carte = carte_epci(directory, signature)
     except Exception as e:  # contours illisibles : message propre, le reste de la page reste utilisable
@@ -913,12 +1097,7 @@ def carte_france(directory: str, signature: tuple) -> None:
     ).add_to(m)
     Legende(fr.INDICATEURS[cle][0], [(carre(ind.CLASS_COLORS[c]), lib) for c, lib in carte["legendes"][cle]]
             + [(carre(ind.PROTECTED_COLOR), "Pas de donnée")]).add_to(m)
-    Cadrage(carte["bounds"], animer=False).add_to(m)
-    show_map(m, None, height=620, key="carte_france")
-    sens = ("Froid : beaucoup d'habitants sans option à 5 min ; chaud : peu." if cle == "part_sans_option" else
-            "Froid : aucune ou peu ; chaud : beaucoup.")
-    note(f"Une couleur par cinquième des intercommunalités (quand beaucoup sont à zéro, elles forment la première "
-         f"classe). {sens} Info-bulle : chiffres agrégés de l'EPCI, jamais un carreau.")
+    carte_fond(m, carte["bounds"], animer=False, key="carte_france")
 
 
 def classement_france(eacc: pd.DataFrame) -> None:
@@ -967,13 +1146,14 @@ def plan_national(plan: pd.DataFrame, eacc: pd.DataFrame) -> None:
         st.info("Aucun emplacement ne tient dans ce budget : choisissez un budget plus élevé.")
         return
     rep = fr.plan_par_epci(sel, eacc)
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2 = st.columns(2)
+    m3, m4 = m1, m2
     m1.metric("Emplacements", ind.fmt_int(len(sel)), border=True, help=ind.compte_types(sel["type"].value_counts().to_dict()))
     m2.metric("Habitants nouvellement desservis", ind.fmt_int(sel["new_pop"].sum()), border=True,
               help="Somme par équipement : un habitant qui gagne à la fois le bus et Citiz compte deux fois.")
     m3.metric("Coût du plan", ind.fmt_eur_plein(sel["cost_eur"].sum()), border=True)
     m4.metric("Intercommunalités concernées", ind.fmt_int(len(rep)), border=True)
-    gauche, droite = st.columns([3, 2], gap="large")
+    gauche, droite = st.container(), st.container()
     with gauche:
         m, _ = base_map(rep, zoom=6)
         maxi = float(rep["new_pop"].max()) or 1.0
@@ -988,9 +1168,9 @@ def plan_national(plan: pd.DataFrame, eacc: pd.DataFrame) -> None:
                                    f'background:{ind.CLASS_COLORS[4]}"></span>',
                                    "Taille = habitants nouvellement desservis")]).add_to(m)
         Cadrage([[rep["lat"].min(), rep["lon"].min()], [rep["lat"].max(), rep["lon"].max()]], animer=False).add_to(m)
-        show_map(m, None, height=480, key="carte_plan_france")
+        show_map(m, None, height=320, key="carte_plan_france")
     with droite:
-        st.dataframe(fr.plan_par_epci_fr(rep), hide_index=True, width="stretch", height=480)
+        st.dataframe(fr.plan_par_epci_fr(rep), hide_index=True, width="stretch", height=320)
     st.download_button("Télécharger la répartition (CSV)",
                        rep.drop(columns=["lat", "lon"]).to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
                        file_name=f"plan_france_{budget}eur.csv", mime="text/csv")
@@ -1014,68 +1194,41 @@ def vue_france() -> None:
         )
         return
     k = fr.kpis_france(eacc)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Habitants (carreaux INSEE)", ind.fmt_int(k["population"]), border=True,
-              help=f"{ind.fmt_int(k['n_epci'])} intercommunalités (EPCI) de France métropolitaine.")
-    c2.metric("Aucune option à 5 min", ind.fmt_pct(k["part_sans_option"]), border=True)
-    c3.metric("Une station Citiz à 5 min", ind.fmt_pct(k["part_citiz"]), border=True)
-    c4.metric("EPCI où Citiz est présent", f"{ind.fmt_int(k['n_epci_citiz'])} sur {ind.fmt_int(k['n_epci'])}", border=True)
-    note(f"Si chaque intercommunalité investissait 500 000 € (investissement et 5 ans de fonctionnement) : "
-         f"<b>{ind.fmt_int(k['potentiel_500k'])}</b> habitants nouvellement desservis au total, même méthode et même "
-         "optimiseur que Strasbourg dans chaque EPCI.")
-    if d["epci_geo"] is None:
-        st.info(f"Contours des EPCI pas encore produits (`{directory / fr.EPCI_GEO}`) : la carte s'affichera "
-                "dès qu'ils seront là.")
-    else:
-        carte_france(str(directory), sig)
-    classement_france(eacc)
-    if d["plan_france"] is not None and not d["plan_france"].empty:
-        plan_national(d["plan_france"], eacc)
-
+    with st.container(key="panneau"):
+        chiffre_hero(ind.fmt_pct(k["part_sans_option"]),
+                     f"des habitants de France métropolitaine n'ont <b>aucune option</b> à 5 minutes à pied")
+        c1, c2 = st.columns(2)
+        c1.metric("Habitants (carreaux INSEE)", ind.fmt_int(k["population"]), border=True,
+                  help=f"{ind.fmt_int(k['n_epci'])} intercommunalités (EPCI) de France métropolitaine.")
+        c2.metric("Aucune option à 5 min", ind.fmt_pct(k["part_sans_option"]), border=True)
+        c1.metric("Une station Citiz à 5 min", ind.fmt_pct(k["part_citiz"]), border=True)
+        c2.metric("EPCI où Citiz est présent", f"{ind.fmt_int(k['n_epci_citiz'])} sur {ind.fmt_int(k['n_epci'])}",
+                  border=True)
+        note(f"Si chaque intercommunalité investissait 500 000 € (investissement et 5 ans de fonctionnement) : "
+             f"<b>{ind.fmt_int(k['potentiel_500k'])}</b> habitants nouvellement desservis au total, même méthode et même "
+             "optimiseur que Strasbourg dans chaque EPCI.")
+        cle = None
+        if d["epci_geo"] is None:
+            st.info(f"Contours des EPCI pas encore produits (`{directory / fr.EPCI_GEO}`) : la carte s'affichera "
+                    "dès qu'ils seront là.")
+        else:
+            cle = choix_indicateur()
+            sens = ("Froid : beaucoup d'habitants sans option à 5 min ; chaud : peu." if cle == "part_sans_option" else
+                    "Froid : aucune ou peu ; chaud : beaucoup.")
+            note(f"Une couleur par cinquième des intercommunalités (quand beaucoup sont à zéro, elles forment la "
+                 f"première classe). {sens} Info-bulle : chiffres agrégés de l'EPCI, jamais un carreau.")
+        classement_france(eacc)
+        if d["plan_france"] is not None and not d["plan_france"].empty:
+            plan_national(d["plan_france"], eacc)
+        pied_panneau()
+    if cle:
+        carte_france(str(directory), sig, cle)
 
 if EST_FRANCE:
     vue_france()
 else:
     st.session_state.setdefault("rubrique", RUBRIQUES[0])  # pas de valeur par défaut : le classement France la choisit
-    col_rub, col_adr = st.columns([3, 2], vertical_alignment="bottom")
-    with col_rub:
+    with st.container(key="nav"):
         rubrique = st.segmented_control("Rubrique", RUBRIQUES, required=True, key="rubrique",
                                         label_visibility="collapsed") or RUBRIQUES[0]
-    with col_adr:
-        barre_adresse()
     {RUBRIQUES[0]: rubrique_acces, RUBRIQUES[1]: rubrique_stations, RUBRIQUES[2]: rubrique_plan}[rubrique]()
-
-
-# --------------------------------------------------------------------------- méthode, limites, sources
-
-with st.expander("Méthode et limites"):
-    st.markdown(
-        f"""
-- **5 minutes = 400 m sur le réseau piéton réel** (OpenStreetMap, 4,8 km/h), pas à vol d'oiseau.
-- **Accessibilité** : options à 5 min par carreau INSEE de 200 m ; les arrêts sont pondérés par leur fréquence
-  (`min(passages / 200, 3)`), chaque station Citiz ou {VILLE['velo_nom']} compte 1.
-- **Habitants nouvellement desservis** : seuls les habitants qui n'ont pas encore d'option du même type à 5 min
-  comptent (bus : ni bus ni tram). On ne renforce pas les zones déjà couvertes. Chiffre affiché : personnes
-  distinctes (un habitant qui gagne le bus et Citiz compte une fois), dénominateur de toutes les parts.
-- **Modèle prédictif** (Citiz) : AUC 0,87 sur un réseau Citiz jamais vu à l'entraînement. Son score mesure la
-  ressemblance aux stations Citiz actuelles, pas l'usage réel ni une probabilité de réservation : d'où le curseur équité.
-- **CO₂** : 2,6 t CO₂e/an par voiture Citiz ajoutée (borne basse ADEME 2022), arrondi ; rien pour bus et vélo.
-- **Vie privée** : carreaux de moins de 11 ménages grisés, sans valeur ; indicateurs sociaux seulement agrégés.
-
-Pour aller plus loin : [limites]({REPO}/docs/LIMITES.md) · [éthique]({REPO}/docs/ETHIQUE.md) ·
-[impact carbone]({REPO}/docs/IMPACT.md) · [contrat de données]({REPO}/docs/DATA_CONTRACT.md) ·
-[France entière]({REPO}/docs/FRANCE.md)
-"""
-    )
-
-GTFS = "GTFS des réseaux (transport.data.gouv.fr)" if EST_FRANCE else "GTFS du réseau urbain"
-CALCULS = ("Python local, même code que les notebooks Fabric (docs/FRANCE.md)" if EST_FRANCE
-           else "Microsoft Fabric, région France Central")
-st.markdown(
-    f'<div class="footer">Sources : INSEE Filosofi 2021 (carreaux 200 m) · {GTFS} (arrêts et fréquences) · '
-    f"flux GBFS Citiz et {VILLE['velo_nom']} · OpenStreetMap (réseau piéton) · QPV 2024-2030 (ANCT) · ADEME (CO₂). "
-    f"Calculs : {CALCULS}. Fonds de carte : Esri, HERE, Garmin, © contributeurs "
-    "OpenStreetMap (fond clair) · © contributeurs OpenStreetMap (plan des rues) · Esri, Maxar, Earthstar Geographics "
-    "(vue satellite).</div>",
-    unsafe_allow_html=True,
-)

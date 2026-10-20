@@ -1,4 +1,4 @@
-# Citiz Mobilité : application de démonstration
+# À deux pas : application de démonstration
 
 Outil d'aide à la décision du Hackathon Mobility Epitech × Citiz × Microsoft : accès aux transports à 5 minutes à pied,
 habitants desservis par chaque arrêt, et plan d'investissement sous budget (Strasbourg, Nancy, France métropolitaine).
