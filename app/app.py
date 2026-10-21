@@ -497,7 +497,7 @@ Pour aller plus loin : [limites]({REPO}/docs/LIMITES.md) · [éthique]({REPO}/do
 """
         )
     gtfs = "GTFS des réseaux (transport.data.gouv.fr)" if EST_FRANCE else "GTFS du réseau urbain"
-    calculs = ("Python local, même code que les notebooks Fabric (docs/FRANCE.md)" if EST_FRANCE
+    calculs = (f"Python local, même code que les notebooks Fabric ([méthode]({REPO}/docs/FRANCE.md))" if EST_FRANCE
                else "Microsoft Fabric, région France Central")
     st.markdown(
         f'<div class="footer">Sources : INSEE Filosofi 2021 (carreaux 200 m) · {gtfs} (arrêts et fréquences) · '
@@ -799,7 +799,7 @@ def rendu_plan(mod, inputs, budget: int, equity: float, types: tuple, horizon: i
               border=True, help="Coût du plan / habitants nouvellement desservis (personnes distinctes).")
     m4.metric("CO₂ évité (ordre de grandeur)", f"≈ {kp['co2_t_an']}\u00a0t/an" if kp["voitures_citiz"] else "—", border=True,
               help=f"{kp['voitures_citiz']} voiture(s) Citiz ajoutée(s), hypothèse prudente d'une voiture par station ; "
-                   "2,6 t CO₂e par an et par voiture (borne basse ADEME 2022, docs/IMPACT.md). "
+                   f"2,6 t CO₂e par an et par voiture (borne basse ADEME 2022, [détail du calcul]({REPO}/docs/IMPACT.md)). "
                    "Aucune estimation pour les arrêts de bus et stations vélo.")
     with haut:
         demo = demographie(departement(data["silver_carreaux"]), horizon)
@@ -916,7 +916,7 @@ def reglages_couts(types) -> tuple | None:
     if ref is None or ref.empty:
         return None
     st.markdown("**Coûts unitaires (HT)**")
-    st.caption("Ordres de grandeur sourcés (docs/COUTS.md), à remplacer par vos devis.")
+    st.caption(f"Ordres de grandeur [sourcés]({REPO}/docs/COUTS.md), à remplacer par vos devis.")
     couts = []
     for r in ref.itertuples():
         bas, haut = getattr(r, "capex_bas", None), getattr(r, "capex_haut", None)
@@ -1013,7 +1013,7 @@ def rubrique_plan() -> None:
             help="0,0 : chaque habitant nouvellement desservi compte pareil. C'est aussi un choix, pas une position "
                  "neutre : il favorise les quartiers denses. 1,0 : un habitant compte jusqu'à deux fois plus selon le "
                  "besoin de son carreau (peu ou pas d'options à 5 min, part de ménages pauvres de l'IRIS). "
-                 "Détail : optim/README.md.")
+                 f"[En savoir plus]({REPO}/optim/README.md).")
         st.caption("◀ 0,0 : chaque habitant compte pareil · 1,0 : priorité aux zones à potentiel ▶")
         with st.expander("Réglages avancés"):
             couts = reglages_couts(types)
@@ -1136,7 +1136,7 @@ def vue_france() -> None:
                   f"Colonnes manquantes dans `{fr.EPCI_ACCESS}` : {', '.join(manquantes)}.")
         st.info(
             "Les données nationales ne sont pas encore disponibles sur ce poste. Produisez-les avec la chaîne "
-            f"nationale (docs/FRANCE.md) :\n\n```\n{COMMANDE_NATIONALE}\n```\n\n{detail} Dossier : variable "
+            f"nationale ([mode d'emploi]({REPO}/docs/FRANCE.md)) :\n\n```\n{COMMANDE_NATIONALE}\n```\n\n{detail} Dossier : variable "
             "`DATA_FRANCE`. En attendant, chaque territoire exporté reste consultable dans le sélecteur."
         )
         return
