@@ -68,7 +68,7 @@ VILLE = ({"ville": fr.FRANCE, "nom": fr.FRANCE_LABEL, "titre": fr.FRANCE_LABEL, 
           "a_velo": True, "est_epci": False} if EST_FRANCE else ind.load_city(data_dir))
 ind.nommer_velo(VILLE["velo_nom"])
 STATIC = APP_DIR / "static"
-NOM = "À deux pas"
+NOM = "À 2 pas"
 st.set_page_config(page_title=f"{NOM} · {VILLE['titre']}", page_icon=str(STATIC / "favicon.png"), layout="wide")
 LOGO = base64.b64encode((STATIC / "logo_128.png").read_bytes()).decode()
 
