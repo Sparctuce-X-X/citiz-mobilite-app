@@ -485,16 +485,12 @@ def pied_panneau() -> None:
     with st.expander("Méthode et limites"):
         st.markdown(
             f"""
-- **5 minutes = 400 m sur le réseau piéton réel** (OpenStreetMap, 4,8 km/h), pas à vol d'oiseau.
-- **Accessibilité** : options à 5 min par carreau INSEE de 200 m ; les arrêts sont pondérés par leur fréquence
-  (`min(passages / 200, 3)`), chaque station Citiz ou {VILLE['velo_nom']} compte 1.
-- **Habitants nouvellement desservis** : seuls les habitants qui n'ont pas encore d'option du même type à 5 min
-  comptent (bus : ni bus ni tram). On ne renforce pas les zones déjà couvertes. Chiffre affiché : personnes
-  distinctes (un habitant qui gagne le bus et Citiz compte une fois), dénominateur de toutes les parts.
-- **Modèle prédictif** (Citiz) : AUC 0,87 sur un réseau Citiz jamais vu à l'entraînement. Son score mesure la
-  ressemblance aux stations Citiz actuelles, pas l'usage réel ni une probabilité de réservation : d'où le curseur équité.
-- **CO₂** : 2,6 t CO₂e/an par voiture Citiz ajoutée (borne basse ADEME 2022), arrondi ; rien pour bus et vélo.
-- **Vie privée** : carreaux de moins de 11 ménages grisés, sans valeur ; indicateurs sociaux seulement agrégés.
+- **5 minutes à pied** = 400 m en suivant les vraies rues, pas à vol d'oiseau.
+- **Habitants desservis** : ceux qui n'avaient rien de ce type à 5 min et qui en gagnent un. Chacun compte une fois.
+- **Modèle** : il repère les endroits qui ressemblent aux stations Citiz actuelles. Entre un endroit avec station et un sans, il place le bon devant 87 fois sur 100.
+  Il ne prédit pas le nombre de réservations.
+- **CO₂** : environ 2,6 t évitées par an pour chaque voiture Citiz ajoutée (ADEME).
+- **Vie privée** : les carreaux de moins de 11 ménages sont grisés.
 
 Pour aller plus loin : [limites]({REPO}/docs/LIMITES.md) · [éthique]({REPO}/docs/ETHIQUE.md) ·
 [impact carbone]({REPO}/docs/IMPACT.md) · [contrat de données]({REPO}/docs/DATA_CONTRACT.md) ·
