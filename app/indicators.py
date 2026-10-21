@@ -521,7 +521,7 @@ def message_plan_vide(couts: dict[str, float], budget: float, horizon: int, budg
     msg = f"Aucun emplacement ne tient dans ce budget. Coût d'un emplacement sur {horizon} an{'s' if horizon > 1 else ''} : {detail}. "
     if budget >= mini:
         return msg + ("Le budget suffit pour au moins un emplacement : aucun emplacement candidat ne passe les "
-                      "filtres choisis (ressemblance minimale aux stations Citiz actuelles, types d'équipement).")
+                      "types d'équipement choisis.")
     proposes = [b for b in budgets if b >= mini]
     return msg + f"Budget minimum : {fmt_eur_plein(mini)}" + (f" (choisir au moins {fmt_eur(proposes[0])})." if proposes else ".")
 

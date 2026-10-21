@@ -38,7 +38,6 @@ REPO = "https://github.com/Sparctuce-X-X/Hackaton-EPITECH-citizxMicrosoft/blob/m
 BUDGETS = [50_000, 100_000, 150_000, 200_000, 300_000, 400_000, 500_000, 750_000,
            1_000_000, 1_500_000, 2_000_000, 2_500_000, 3_000_000]
 EQUITE = [round(i / 10, 1) for i in range(11)]
-MIN_P = [round(i * 0.05, 2) for i in range(19)]
 TYPES_PLAN = ("citiz", "bus", "velhop")
 CONTOUR_DIFF = "#F4A100"  # emplacement présent dans un seul des deux plans (comparaison)
 TEXTE = "#2B3445"
@@ -1017,10 +1016,6 @@ def rubrique_plan() -> None:
                  "Détail : optim/README.md.")
         st.caption("◀ 0,0 : chaque habitant compte pareil · 1,0 : priorité aux zones à potentiel ▶")
         with st.expander("Réglages avancés"):
-            min_p = st.select_slider(
-                f"{ind.P_USAGE_LABEL} : minimum", options=MIN_P, value=0.0, key="min_p",
-                format_func=lambda v: ind.fmt_dec(v, 2),
-                help=ind.P_USAGE_HELP + " Les emplacements Citiz sous ce score sont écartés (modèle, AUC 0,87).")
             couts = reglages_couts(types)
         st.toggle("Comparer avec et sans équité", key="comparer",
                   help="Calcule côte à côte le plan au curseur 0,0 et le plan au curseur choisi (1,0 si le curseur "
@@ -1028,6 +1023,7 @@ def rubrique_plan() -> None:
 
         bas = st.container()
         pied_panneau()
+    min_p = 0.0  # pas de seuil : le score du modèle pondère déjà les emplacements Citiz dans l'optimiseur
     with haut:
         if SANS_CITIZ:
             premieres_stations_citiz(horizon)
